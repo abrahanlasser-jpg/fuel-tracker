@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Boat Fuel Tracker</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0077b6" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: sans-serif; background: #f0f4f8; max-width: 520px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; }
+    #app { display: flex; flex-direction: column; min-height: 100vh; }
+    .header { background: linear-gradient(135deg, #0077b6, #00b4d8); color: #fff; padding: 18px 20px 14px; }
+    .header h1 { font-size: 20px; font-weight: 700; }
+    .header p { font-size: 12px; opacity: 0.85; margin-top: 2px; }
+    .body { flex: 1; padding: 16px; padding-bottom: 80px; }
+    .card { background: #fff; border-radius: 14px; padding: 16px; margin-bottom: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
+    .gauges { display: flex; gap: 12px; margin-bottom: 14px; }
+    .gauge-card { flex: 1; background: #fff; border-radius: 14px; padding: 14px 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.07); text-align: center; }
+    .gauge-label { font-size: 13px; font-weight: 700; color: #555; margin-bottom: 10px; }
+    .gauge-wrap { position: relative; width: 60px; height: 110px; margin: 0 auto 10px; border-radius: 10px; border: 3px solid #ccc; background: #f0f4f8; overflow: hidden; }
+    .gauge-fill { position: absolute; bottom: 0; left: 0; right: 0; transition: height 0.5s ease; }
+    .gauge-seg { position: absolute; left: 0; right: 0; height: 1px; background: rgba(255,255,255,0.4); }
+    .gauge-pct { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 13px; font-weight: 800; }
+    .gauge-val { font-size: 20px; font-weight: 800; }
+    .gauge-sub { font-size: 11px; color: #888; }
+    .latest-card { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; }
+    .latest-loc { font-size: 16px; font-weight: 700; }
+    .latest-sub { font-size: 12px; color: #888; }
+    .lph-card { text-align: center; }
+    .lph-val { font-size: 40px; font-weight: 900; color: #0077b6; }
+    .lph-lbl { font-size: 14px; color: #555; }
+    .lph-sub { font-size: 12px; color: #aaa; margin-top: 4px; }
+    .hrs-val { font-size: 26px; font-weight: 900; color: #0077b6; }
+    label { display: block; font-size: 13px; color: #555; margin-bottom: 4px; font-weight: 600; }
+    input { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1.5px solid #d0d7e2; font-size: 15px; margin-bottom: 12px; }
+    .btn { width: 100%; padding: 13px; border-radius: 10px; border: none; font-size: 16px; font-weight: 700; cursor: pointer; margin-bottom: 8px; }
+    .btn-primary { background: linear-gradient(135deg, #0077b6, #00b4d8); color: #fff; }
+    .btn-secondary { background: #e8f4fd; color: #0077b6; }
+    .success { background: #d4edda; color: #155724; border-radius: 10px; padding: 12px; text-align: center; font-weight: 700; margin-bottom: 12px; }
+    .nav { display: flex; background: #fff; border-top: 1px solid #e0e7ef; position: fixed; bottom: 0; left: 0; right: 0; max-width: 520px; margin: 0 auto; z-index: 100; }
+    .nav-btn { flex: 1; padding: 12px 0; border: none; background: none; font-size: 13px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; color: #999; }
+    .nav-btn.active { color: #0077b6; font-weight: 700; }
+    .nav-icon { font-size: 20px; }
+    table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; }
+    th { padding: 8px 10px; font-size: 12px; font-weight: 700; color: #fff; background: #0077b6; text-align: center; white-space: nowrap; }
+    th.back { background: #f4a261; }
+    th.front { background: #00b4d8; }
+    td { padding: 7px 8px; font-size: 13px; text-align: center; border-bottom: 1px solid #e8edf3; }
+    td.loc { text-align: left; font-weight: 600; }
+    tr:nth-child(even) { background: #f8fafc; }
+    .del-btn { background: none; border: none; cursor: pointer; font-size: 16px; }
+    h3 { color: #0077b6; margin-bottom: 14px; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div class="header">
+    <h1>⛵ Boat Fuel Tracker</h1>
+    <p>Dual tank · Litres per hour</p>
+  </div>
+  <div class="body" id="body"></div>
+  <nav class="nav">
+    <button class="nav-btn active" onclick="showView('home')" id="nav-home"><span class="nav-icon">🏠</span><span>Home</span></button>
+    <button class="nav-btn" onclick="showView('add')" id="nav-add"><span class="nav-icon">➕</span><span>Add</span></button>
+    <button class="nav-btn" onclick="showView('history')" id="nav-history"><span class="nav-icon">📋</span><span>History</span></button>
+  </nav>
+</div>
+
+<script>
+const CAPACITY = 80;
+const KEY = "boat_fuel_v3";
+
+const PRELOADED = [
+  {id:1,date:"2025-12-20",location:"Port Adelaide",back:80,front:80,engineHours:25},
+  {id:2,date:"2026-01-03",location:"Robe",back:65,front:55,engineHours:71},
+  {id:3,date:"2026-01-10",location:"Portland",back:25,front:30,engineHours:101},
+  {id:4,date:"2026-01-11",location:"Portland",back:80,front:80,engineHours:101},
+  {id:5,date:"2026-01-12",location:"Apollo Bay",back:55,front:50,engineHours:123},
+  {id:6,date:"2026-01-20",location:"Apollo Bay",back:80,front:80,engineHours:123},
+  {id:7,date:"2026-01-22",location:"Cowes",back:60,front:80,engineHours:130},
+  {id:8,date:"2026-01-26",location:"Hastings",back:55,front:65,engineHours:139},
+  {id:9,date:"2026-02-17",location:"Lakes Entrance",back:72,front:80,engineHours:190},
+  {id:10,date:"2026-02-23",location:"Eden",back:32,front:80,engineHours:211},
+  {id:11,date:"2026-03-04",location:"Batesman",back:75,front:40,engineHours:233},
+  {id:12,date:"2026-03-05",location:"Batesman",back:80,front:null,engineHours:233},
+  {id:13,date:"2026-04-22",location:"Port Stephen",back:65,front:78,engineHours:325},
+  {id:14,date:"2026-04-26",location:"Port Stephen",back:50,front:80,engineHours:345},
+  {id:15,date:"2026-06-06",location:"Peel Island",back:45,front:80,engineHours:382},
+];
+
+let logs = [];
+let currentView = "home";
+
+function loadLogs() {
+  try {
+    const s = localStorage.getItem(KEY);
+    logs = s ? JSON.parse(s) : PRELOADED;
+    if (!s) localStorage.setItem(KEY, JSON.stringify(PRELOADED));
+  } catch { logs = PRELOADED; }
+}
+
+function saveLogs() {
+  localStorage.setItem(KEY, JSON.stringify(logs));
+}
+
+function fmtDate(d) {
+  const [y,m,day] = d.split("-");
+  return `${day}/${m}/${String(y).slice(2)}`;
+}
+
+function sorted() {
+  return [...logs].sort((a,b) => a.engineHours - b.engineHours || a.date.localeCompare(b.date));
+}
+
+function calcLPH() {
+  const s = sorted();
+  const front = s.filter(l => l.front !== null);
+  const back = s.filter(l => l.back !== null);
+  let fuel = 0;
+  for (let i=1;i<front.length;i++) { const d=front[i-1].front-front[i].front; if(d>0) fuel+=d; }
+  for (let i=1;i<back.length;i++) { const d=back[i-1].back-back[i].back; if(d>0) fuel+=d; }
+  const span = s.length>1 ? s[s.length-1].engineHours - s[0].engineHours : 0;
+  return (span>0 && fuel>0) ? (fuel/span).toFixed(2) : null;
+}
+
+function gaugeHTML(label, liters) {
+  const pct = liters !== null ? Math.min(100, Math.max(0, (liters/CAPACITY)*100)) : 0;
+  const color = liters===null ? "#ccc" : pct>50 ? "#00b4d8" : pct>25 ? "#f4a261" : "#e63946";
+  const segs = Array.from({length:7},(_,i)=>`<div class="gauge-seg" style="bottom:${((i+1)/8)*100}%"></div>`).join("");
+  const pctTxt = liters!==null ? Math.round(pct)+"%" : "—";
+  const txtColor = pct>40 ? "#fff" : "#333";
+  return `<div class="gauge-card">
+    <div class="gauge-label">${label} Tank</div>
+    <div class="gauge-wrap" style="border-color:${color}">
+      <div class="gauge-fill" style="height:${pct}%;background:linear-gradient(180deg,${color}99,${color})"></div>
+      ${segs}
+      <div class="gauge-pct" style="color:${txtColor}">${pctTxt}</div>
+    </div>
+    <div class="gauge-val" style="color:${color}">${liters!==null ? liters+"L" : "—"}</div>
+    <div class="gauge-sub">of ${CAPACITY} L</div>
+  </div>`;
+}
+
+function renderHome() {
+  const s = sorted();
+  const latest = s.length ? s[s.length-1] : null;
+  const latestFront = [...s].reverse().find(l=>l.front!==null)?.front ?? null;
+  const latestBack = [...s].reverse().find(l=>l.back!==null)?.back ?? null;
+  const lph = calcLPH();
+  const totalHrs = s.length>1 ? (s[s.length-1].engineHours - s[0].engineHours).toFixed(1) : 0;
+
+  return `
+    <div class="gauges">${gaugeHTML("Front", latestFront)}${gaugeHTML("Back", latestBack)}</div>
+    ${latest ? `<div class="card latest-card">
+      <div>
+        <div class="latest-sub">Latest Reading</div>
+        <div class="latest-loc">📍 ${latest.location}</div>
+        <div class="latest-sub">${fmtDate(latest.date)}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="latest-sub">Engine Hours</div>
+        <div class="hrs-val">${latest.engineHours}</div>
+        <div class="latest-sub">hrs</div>
+      </div>
+    </div>` : ""}
+    <div class="card lph-card">
+      <div class="latest-sub" style="margin-bottom:4px">Combined Consumption</div>
+      <div class="lph-val">${lph ?? "—"}</div>
+      <div class="lph-lbl">litres per hour</div>
+      <div class="lph-sub">${totalHrs} engine hours logged</div>
+    </div>
+    <button class="btn btn-primary" onclick="showView('add')">+ Add Fuel Entry</button>
+    <button class="btn btn-secondary" onclick="showView('history')">View History</button>`;
+}
+
+function renderAdd() {
+  const today = new Date().toISOString().slice(0,10);
+  return `<div class="card">
+    <h3>New Fuel Entry</h3>
+    <div id="save-msg" class="hidden success">✅ Entry saved!</div>
+    <label>Engine Hours (hr meter reading)</label>
+    <input id="f-hrs" type="number" step="0.1" min="0" placeholder="e.g. 390.0">
+    <label>Front Tank — Litres in Tank</label>
+    <input id="f-front" type="number" step="0.1" min="0" max="${CAPACITY}" placeholder="0–${CAPACITY} L (leave blank if not measured)">
+    <label>Back Tank — Litres in Tank</label>
+    <input id="f-back" type="number" step="0.1" min="0" max="${CAPACITY}" placeholder="0–${CAPACITY} L (leave blank if not measured)">
+    <label>Location</label>
+    <input id="f-loc" type="text" placeholder="e.g. Peel Island">
+    <label>Date</label>
+    <input id="f-date" type="date" value="${today}">
+    <button class="btn btn-primary" onclick="submitEntry()">Save Entry</button>
+    <button class="btn btn-secondary" onclick="showView('home')">Cancel</button>
+  </div>`;
+}
+
+function renderHistory() {
+  const s = [...sorted()].reverse();
+  const rows = s.map((log,i) => `<tr>
+    <td>${fmtDate(log.date)}</td>
+    <td class="loc">${log.location}</td>
+    <td style="color:#c25a00;font-weight:700">${log.back!==null?log.back:"—"}</td>
+    <td style="color:#0077b6;font-weight:700">${log.front!==null?log.front:"—"}</td>
+    <td style="font-weight:600">${log.engineHours}</td>
+    <td><button class="del-btn" onclick="deleteLog(${log.id})">🗑</button></td>
+  </tr>`).join("");
+  return `<h3>Fuel Log History</h3>
+  <div style="overflow-x:auto;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.07)">
+    <table>
+      <thead><tr>
+        <th>Date</th><th>Location</th>
+        <th class="back">Back (L)</th>
+        <th class="front">Front (L)</th>
+        <th>Hrs</th><th></th>
+      </tr></thead>
+      <tbody>${rows || '<tr><td colspan="6" style="text-align:center;color:#888;padding:20px">No entries yet.</td></tr>'}</tbody>
+    </table>
+  </div>`;
+}
+
+function showView(v) {
+  currentView = v;
+  document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
+  document.getElementById("nav-"+v).classList.add("active");
+  const body = document.getElementById("body");
+  if (v==="home") body.innerHTML = renderHome();
+  else if (v==="add") body.innerHTML = renderAdd();
+  else body.innerHTML = renderHistory();
+}
+
+function submitEntry() {
+  const hrs = document.getElementById("f-hrs").value;
+  const front = document.getElementById("f-front").value;
+  const back = document.getElementById("f-back").value;
+  const loc = document.getElementById("f-loc").value.trim();
+  const date = document.getElementById("f-date").value;
+  if (!hrs || !loc || !date || (front==="" && back==="")) {
+    alert("Please fill engine hours, location, date, and at least one tank.");
+    return;
+  }
+  logs.push({ id: Date.now(), date, location: loc, engineHours: parseFloat(hrs), front: front!==""?parseFloat(front):null, back: back!==""?parseFloat(back):null });
+  logs.sort((a,b) => a.engineHours-b.engineHours || a.date.localeCompare(b.date));
+  saveLogs();
+  const msg = document.getElementById("save-msg");
+  msg.classList.remove("hidden");
+  setTimeout(() => showView("history"), 1200);
+}
+
+function deleteLog(id) {
+  if (!confirm("Delete this entry?")) return;
+  logs = logs.filter(l => l.id !== id);
+  saveLogs();
+  showView("history");
+}
+
+loadLogs();
+showView("home");
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js");
+}
+</script>
+</body>
+</html>
